@@ -268,8 +268,8 @@ def main():
     U_test = data[train_len:train_len+test_len]
     D_test = data[train_len+step:]
 
-    esn = ESN(1, 1, 50)
-    optimizer = Tikhonov(50, 1, 1e-3)
+    esn = ESN(1, 1, 10)
+    optimizer = Tikhonov(10, 1, 1e-3)
 
     U = torch.from_numpy(U_train).to(device)
     D = torch.from_numpy(D_train).to(device)
