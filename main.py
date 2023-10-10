@@ -8,10 +8,6 @@ import numpy as np
 import networkx as nx
 
 
-# 恒等写像
-def identity(x):
-    return x
-
 # 入力層
 class Input:
     # 入力結合重み行列Winの初期化
@@ -162,9 +158,7 @@ class ESN:
                  input_scale=1.0,
                  rho=0.95,
                  activation_func=np.tanh,
-                 leaking_rate=1.0,
-                 output_func=identity,
-                 inv_output_func=identity):
+                 leaking_rate=1.0):
         '''
         param N_u: 入力次元
         param N_y: 出力次元
@@ -176,8 +170,6 @@ class ESN:
         param fb_scale: フィードバックスケーリング（default: None）
         param fb_seed: フィードバック結合重み行列生成に使う乱数の種
         param leaking_rate: leaky integratorモデルのリーク率
-        param output_func: 出力層の非線形関数（default: 恒等写像）
-        param inv_output_func: output_funcの逆関数
         param classification: 分類問題の場合はTrue（default: False）
         param average_window: 分類問題で出力平均する窓幅（default: None）
         '''
@@ -188,8 +180,6 @@ class ESN:
         self.N_u = N_u
         self.N_y = N_y
         self.N_x = N_x
-        self.output_func = output_func
-        self.inv_output_func = inv_output_func
 
     # バッチ学習
     def train(self, U, D, optimizer, trans_len = 0):
@@ -215,7 +205,7 @@ class ESN:
             x = self.reservoir(x_in)
 
             # 目標値
-            d = self.inv_output_func(D[n])            
+            d = D[n]            
 
             # 学習器
             if n > trans_len:  # 過渡期を過ぎたら
@@ -223,7 +213,7 @@ class ESN:
 
             # 学習前のモデル出力
             y = self.output(x)
-            Y.append(self.output_func(y))
+            Y.append(y)
 
         # 学習済みの出力結合重み行列を設定
         self.output.setweight(optimizer.get_Wout_opt())
@@ -247,7 +237,7 @@ class ESN:
 
             # 学習後のモデル出力
             y_pred = self.output(x)
-            Y_pred.append(self.output_func(y_pred))
+            Y_pred.append(y_pred)
 
         # モデル出力（学習後）
         return torch.cat(Y_pred)
