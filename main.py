@@ -12,11 +12,6 @@ import networkx as nx
 class Input:
     # 入力結合重み行列Winの初期化
     def __init__(self, N_u, N_x, input_scale, seed=0):
-        '''
-        param N_u: 入力次元
-        param N_x: リザバーのノード数
-        param input_scale: 入力スケーリング
-        '''
         # 一様分布に従う乱数
         np.random.seed(seed=seed)
         self.Win = np.random.uniform(-input_scale, input_scale, (N_x, N_u)).astype(np.float32)
@@ -25,10 +20,6 @@ class Input:
 
     # 入力結合重み行列Winによる重みづけ
     def __call__(self, u):
-        '''
-        param u: N_u次元のベクトル
-        return: N_x次元のベクトル
-        '''
         return torch.mv(self.Win, u)
 
 
@@ -36,14 +27,6 @@ class Input:
 class Reservoir:
     # リカレント結合重み行列Wの初期化
     def __init__(self, N_x, density, rho, activation_func, leaking_rate, seed=0):
-        '''
-        param N_x: リザバーのノード数
-        param density: ネットワークの結合密度
-        param rho: リカレント結合重み行列のスペクトル半径
-        param activation_func: ノードの活性化関数
-        param leaking_rate: leaky integratorモデルのリーク率
-        param seed: 乱数の種
-        '''
         self.seed = seed
         self.W = self.make_connection(N_x, density, rho).astype(np.float32)
         self.W = torch.from_numpy(self.W).to(device)
@@ -78,10 +61,6 @@ class Reservoir:
 
     # リザバー状態ベクトルの更新
     def __call__(self, x_in):
-        '''
-        param x_in: 更新前の状態ベクトル
-        return: 更新後の状態ベクトル
-        '''
         self.x = (1.0 - self.alpha) * self.x + self.alpha * torch.tanh(torch.mv(self.W, self.x) + x_in)
         return self.x
 
@@ -94,11 +73,6 @@ class Reservoir:
 class Output:
     # 出力結合重み行列の初期化
     def __init__(self, N_x, N_y, seed=0):
-        '''
-        param N_x: リザバーのノード数
-        param N_y: 出力次元
-        param seed: 乱数の種
-        '''
         # 正規分布に従う乱数
         np.random.seed(seed=seed)
         self.Wout = np.random.normal(size=(N_y, N_x)).astype(np.float32)
@@ -106,10 +80,6 @@ class Output:
 
     # 出力結合重み行列による重みづけ
     def __call__(self, x):
-        '''
-        param x: N_x次元のベクトル
-        return: N_y次元のベクトル
-        '''
         return torch.mv(self.Wout, x)
 
     # 学習済みの出力結合重み行列を設定
@@ -120,11 +90,6 @@ class Output:
 # リッジ回帰（beta=0のときは線形回帰）
 class Tikhonov:
     def __init__(self, N_x, N_y, beta):
-        '''
-        param N_x: リザバーのノード数
-        param N_y: 出力次元
-        param beta: 正則化パラメータ
-        '''
         self.beta = beta
         self.X_XT = torch.zeros(N_x, N_x, dtype=torch.float32).to(device)
         self.D_XT = torch.zeros(N_y, N_x, dtype=torch.float32).to(device)
@@ -159,20 +124,6 @@ class ESN:
                  rho=0.95,
                  activation_func=np.tanh,
                  leaking_rate=1.0):
-        '''
-        param N_u: 入力次元
-        param N_y: 出力次元
-        param N_x: リザバーのノード数
-        param density: リザバーのネットワーク結合密度
-        param input_scale: 入力スケーリング
-        param rho: リカレント結合重み行列のスペクトル半径
-        param activation_func: リザバーノードの活性化関数
-        param fb_scale: フィードバックスケーリング（default: None）
-        param fb_seed: フィードバック結合重み行列生成に使う乱数の種
-        param leaking_rate: leaky integratorモデルのリーク率
-        param classification: 分類問題の場合はTrue（default: False）
-        param average_window: 分類問題で出力平均する窓幅（default: None）
-        '''
         self.input = Input(N_u, N_x, input_scale)
         self.reservoir = Reservoir(N_x, density, rho, activation_func,
                                    leaking_rate)
@@ -183,17 +134,6 @@ class ESN:
 
     # バッチ学習
     def train(self, U, D, optimizer, trans_len = 0):
-        '''
-        U: 教師データの入力, データ長×N_u
-        D: 教師データの出力, データ長×N_y
-        optimizer: 学習器
-        trans_len: 過渡期の長さ
-        return: 学習前のモデル出力
-        '''
-        # U = U.to('cpu').detach().numpy().copy()
-        # D = D.to('cpu').detach().numpy().copy()
-
-
         train_len = len(U)
         Y = []
 
@@ -241,6 +181,8 @@ class ESN:
 
         # モデル出力（学習後）
         return torch.cat(Y_pred)
+    
+
 
 import matplotlib.pyplot as plt
 
