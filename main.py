@@ -8,65 +8,62 @@ import numpy as np
 import networkx as nx
 
 
-# 入力層
-class Input:
-    # 入力結合重み行列Winの初期化
-    def __init__(self, N_u, N_x, input_scale, seed=0):
-        # 一様分布に従う乱数
-        np.random.seed(seed=seed)
-        self.Win = np.random.uniform(-input_scale, input_scale, (N_x, N_u)).astype(np.float32)
-        self.Win = torch.from_numpy(self.Win).to(device)
-        self.N_u = N_u
+# # 入力層
+# class Input:
+#     # 入力結合重み行列Winの初期化
+#     def __init__(self, N_u, N_x, input_scale, seed=0):
+#         # 一様分布に従う乱数
 
-    # 入力結合重み行列Winによる重みづけ
-    def __call__(self, u):
-        return torch.mv(self.Win, u)
+
+#     # 入力結合重み行列Winによる重みづけ
+#     def __call__(self, u):
+#         return torch.mv(self.Win, u)
 
 
 # リザバー
-class Reservoir:
-    # リカレント結合重み行列Wの初期化
-    def __init__(self, N_x, density, rho, activation_func, leaking_rate, seed=0):
-        self.seed = seed
-        self.W = self.make_connection(N_x, density, rho).astype(np.float32)
-        self.W = torch.from_numpy(self.W).to(device)
-        self.x = np.zeros(N_x).astype(np.float32)  # リザバー状態ベクトルの初期化
-        self.x = torch.from_numpy(self.x).to(device)
-        self.activation_func = activation_func
-        self.alpha = leaking_rate
+# class Reservoir:
+#     # リカレント結合重み行列Wの初期化
+#     def __init__(self, N_x, density, rho, activation_func, leaking_rate, seed=0):
+#         self.seed = seed
+#         self.W = self.make_connection(N_x, density, rho).astype(np.float32)
+#         self.W = torch.from_numpy(self.W).to(device)
+#         self.x = np.zeros(N_x).astype(np.float32)  # リザバー状態ベクトルの初期化
+#         self.x = torch.from_numpy(self.x).to(device)
+#         self.activation_func = activation_func
+#         self.alpha = leaking_rate
 
-    # リカレント結合重み行列の生成
-    def make_connection(self, N_x, density, rho):
-        # Erdos-Renyiランダムグラフ
-        m = int(N_x*(N_x-1)*density/2)  # 総結合数
-        G = nx.gnm_random_graph(N_x, m, self.seed)
+#     # リカレント結合重み行列の生成
+#     def make_connection(self, N_x, density, rho):
+#         # Erdos-Renyiランダムグラフ
+#         m = int(N_x*(N_x-1)*density/2)  # 総結合数
+#         G = nx.gnm_random_graph(N_x, m, self.seed)
 
-        # 行列への変換(結合構造のみ）
-        connection = nx.to_numpy_array(G)
-        W = np.array(connection)
+#         # 行列への変換(結合構造のみ）
+#         connection = nx.to_numpy_array(G)
+#         W = np.array(connection)
 
-        # 非ゼロ要素を一様分布に従う乱数として生成
-        rec_scale = 1.0
-        np.random.seed(seed=self.seed)
-        W *= np.random.uniform(-rec_scale, rec_scale, (N_x, N_x))
+#         # 非ゼロ要素を一様分布に従う乱数として生成
+#         rec_scale = 1.0
+#         np.random.seed(seed=self.seed)
+#         W *= np.random.uniform(-rec_scale, rec_scale, (N_x, N_x))
 
-        # スペクトル半径の計算
-        eigv_list = np.linalg.eig(W)[0]
-        sp_radius = np.max(np.abs(eigv_list))
+#         # スペクトル半径の計算
+#         eigv_list = np.linalg.eig(W)[0]
+#         sp_radius = np.max(np.abs(eigv_list))
 
-        # 指定のスペクトル半径rhoに合わせてスケーリング
-        W *= rho / sp_radius
+#         # 指定のスペクトル半径rhoに合わせてスケーリング
+#         W *= rho / sp_radius
 
-        return W
+#         return W
 
-    # リザバー状態ベクトルの更新
-    def __call__(self, x_in):
-        self.x = (1.0 - self.alpha) * self.x + self.alpha * torch.tanh(torch.mv(self.W, self.x) + x_in)
-        return self.x
+    # # リザバー状態ベクトルの更新
+    # def __call__(self, x_in):
+    #     self.x = (1.0 - self.alpha) * self.x + self.alpha * torch.tanh(torch.mv(self.W, self.x) + x_in)
+    #     return self.x
 
-    # リザバー状態ベクトルの初期化
-    def reset_reservoir_state(self):
-        self.x *= 0.0
+    # # リザバー状態ベクトルの初期化
+    # def reset_reservoir_state(self):
+    #     self.x *= 0.0
 
 
 # 出力層
@@ -124,13 +121,49 @@ class ESN:
                  rho=0.95,
                  activation_func=np.tanh,
                  leaking_rate=1.0):
-        self.input = Input(N_u, N_x, input_scale)
-        self.reservoir = Reservoir(N_x, density, rho, activation_func,
-                                   leaking_rate)
-        self.output = Output(N_x, N_y)
+        self.seed = 0
+        np.random.seed(seed=self.seed)
+        self.Win = np.random.uniform(-input_scale, input_scale, (N_x, N_u)).astype(np.float32)
+        self.Win = torch.from_numpy(self.Win).to(device)
+        self.N_u = N_u
+
+        self.W = self.make_connection(N_x, density, rho).astype(np.float32)
+        self.W = torch.from_numpy(self.W).to(device)
+        self.x = np.zeros(N_x).astype(np.float32)  # リザバー状態ベクトルの初期化
+        self.x = torch.from_numpy(self.x).to(device)
+        self.activation_func = activation_func
+        self.alpha = leaking_rate
+
+        self.Wout = np.random.normal(size=(N_y, N_x)).astype(np.float32)
+        self.Wout = torch.from_numpy(self.Wout).to(device)
+
         self.N_u = N_u
         self.N_y = N_y
         self.N_x = N_x
+
+    def make_connection(self, N_x, density, rho):
+        # Erdos-Renyiランダムグラフ
+        m = int(N_x*(N_x-1)*density/2)  # 総結合数
+        G = nx.gnm_random_graph(N_x, m, self.seed)
+
+        # 行列への変換(結合構造のみ）
+        connection = nx.to_numpy_array(G)
+        W = np.array(connection)
+
+        # 非ゼロ要素を一様分布に従う乱数として生成
+        rec_scale = 1.0
+        np.random.seed(seed=self.seed)
+        W *= np.random.uniform(-rec_scale, rec_scale, (N_x, N_x))
+
+        # スペクトル半径の計算
+        eigv_list = np.linalg.eig(W)[0]
+        sp_radius = np.max(np.abs(eigv_list))
+
+        # 指定のスペクトル半径rhoに合わせてスケーリング
+        W *= rho / sp_radius
+
+        return W
+
 
     # バッチ学習
     def train(self, U, D, optimizer, trans_len = 0):
@@ -139,44 +172,45 @@ class ESN:
 
         # 時間発展
         for n in range(train_len):
-            x_in = self.input(U[n])
+            u = U[n]
+            d = D[n]
+            
+            # 入力層
+            x_in = torch.mv(self.Win, u)
 
             # リザバー状態ベクトル
-            x = self.reservoir(x_in)
-
-            # 目標値
-            d = D[n]            
+            self.x = (1.0 - self.alpha) * self.x + self.alpha * torch.tanh(torch.mv(self.W, self.x) + x_in)
+            
 
             # 学習器
             if n > trans_len:  # 過渡期を過ぎたら
-                optimizer(d, x)
+                optimizer(d, self.x)
 
             # 学習前のモデル出力
-            y = self.output(x)
+            y = torch.mv(self.Wout, self.x)
             Y.append(y)
 
         # 学習済みの出力結合重み行列を設定
-        self.output.setweight(optimizer.get_Wout_opt())
-
+        self.Wout = optimizer.get_Wout_opt()
+        
         # モデル出力（学習前）
         return torch.cat(Y)
 
     # バッチ学習後の予測
     def predict(self, U):
-        # U = U.to('cpu').detach().numpy().copy()
-        
         test_len = len(U)
         Y_pred = []
 
         # 時間発展
         for n in range(test_len):
-            x_in = self.input(U[n])
+            u = U[n]
+            x_in = torch.mv(self.Win, u)
 
             # リザバー状態ベクトル
-            x = self.reservoir(x_in)
+            self.x = (1.0 - self.alpha) * self.x + self.alpha * torch.tanh(torch.mv(self.W, self.x) + x_in)
 
             # 学習後のモデル出力
-            y_pred = self.output(x)
+            y_pred = torch.mv(self.Wout, self.x)
             Y_pred.append(y_pred)
 
         # モデル出力（学習後）
@@ -200,8 +234,8 @@ def main():
     U_test = data[train_len:train_len+test_len]
     D_test = data[train_len+step:]
 
-    esn = ESN(1, 1, 10)
-    optimizer = Tikhonov(10, 1, 1e-3)
+    esn = ESN(1, 1, 30)
+    optimizer = Tikhonov(30, 1, 1e-3)
 
     U = torch.from_numpy(U_train).to(device)
     D = torch.from_numpy(D_train).to(device)
@@ -216,9 +250,6 @@ def main():
     plt.plot(D_test)
     plt.plot(y.to('cpu').detach().numpy().copy())
     plt.show()
-    
-    
-    
 
 if __name__ == '__main__':
     main()
