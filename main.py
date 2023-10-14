@@ -18,22 +18,17 @@ class ESN:
                  density=0.05,
                  input_scale=1.0,
                  rho=0.95,
-                 activation_func=np.tanh,
                  leaking_rate=1.0):
         self.seed = 0
         np.random.seed(seed=self.seed)
-        self.W_in = np.random.uniform(-input_scale, input_scale, (N_x, N_u)).astype(np.float32)
-        self.W_in = torch.from_numpy(self.W_in).to(device)
+        self.W_in = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale).to(device)
         self.N_u = N_u
 
         self.W = self.make_W(N_x, density, rho)
-        self.x = np.zeros(N_x).astype(np.float32)  # リザバー状態ベクトルの初期化
-        self.x = torch.from_numpy(self.x).to(device)
-        self.activation_func = activation_func
+        self.x = torch.Tensor(N_x).to(device)
         self.alpha = leaking_rate
 
-        self.Wout = np.random.normal(size=(N_y, N_x)).astype(np.float32)
-        self.Wout = torch.from_numpy(self.Wout).to(device)
+        self.Wout = torch.Tensor(N_y, N_x).to(device)
 
         self.N_u = N_u
         self.N_y = N_y
