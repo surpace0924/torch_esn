@@ -50,8 +50,7 @@ class ESN:
         self.W_in = torch.from_numpy(self.W_in).to(device)
         self.N_u = N_u
 
-        self.W = self.make_connection(N_x, density, rho).astype(np.float32)
-        self.W = torch.from_numpy(self.W).to(device)
+        self.W = self.make_W(N_x, density, rho)
         self.x = np.zeros(N_x).astype(np.float32)  # リザバー状態ベクトルの初期化
         self.x = torch.from_numpy(self.x).to(device)
         self.activation_func = activation_func
@@ -64,27 +63,29 @@ class ESN:
         self.N_y = N_y
         self.N_x = N_x
 
-    def make_connection(self, N_x, density, rho):
-        # Erdos-Renyiランダムグラフ
-        m = int(N_x*(N_x-1)*density/2)  # 総結合数
-        G = nx.gnm_random_graph(N_x, m, self.seed)
+    # density: 結合密度
+    # density: スペクトル半径
+    def make_W(self, N_x, density, spectral_radius):
+        # N_x*N_x次元のベクトルを用意
+        W = torch.Tensor(N_x * N_x).to(device)
 
-        # 行列への変換(結合構造のみ）
-        connection = nx.to_numpy_array(G)
-        W = np.array(connection)
+        # [-1.0, 1.0] の乱数で初期化
+        W.uniform_(-1.0, 1.0)
 
-        # 非ゼロ要素を一様分布に従う乱数として生成
-        rec_scale = 1.0
-        np.random.seed(seed=self.seed)
-        W *= np.random.uniform(-rec_scale, rec_scale, (N_x, N_x))
+        # 結合密度に応じて W の要素を 0 にする
+        zero_idx = torch.randperm(int(N_x * N_x))
+        zero_idx = zero_idx[:int(N_x * N_x * (1 - density))]
+        W[zero_idx] = 0.0
 
-        # スペクトル半径の計算
-        eigv_list = np.linalg.eig(W)[0]
-        sp_radius = np.max(np.abs(eigv_list))
+        # 行列形式にする
+        W = W.view(N_x, N_x)
 
-        # 指定のスペクトル半径rhoに合わせてスケーリング
-        W *= rho / sp_radius
-
+        # 指定したスペクトル半径となるようにリスケール
+        eigs = torch.linalg.eigvals(W)
+        max_eigs = torch.max(torch.abs(eigs))
+        if max_eigs != 0:
+            W = W * (spectral_radius / max_eigs)
+        
         return W
 
     def reservoir(self, u, x, alpha, W_in, W):
@@ -166,8 +167,8 @@ def main():
     U = torch.unsqueeze(U, dim=-1)
     y = esn.predict(U)
     
-    plt.plot(D_test)
-    plt.plot(y.to('cpu').detach().numpy().copy())
+    plt.plot(D_test[:400])
+    plt.plot(y.to('cpu').detach().numpy().copy()[:400])
     plt.show()
 
 if __name__ == '__main__':
