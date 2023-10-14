@@ -7,30 +7,6 @@ device = torch.device('cuda')
 import numpy as np
 import networkx as nx
 
-# リッジ回帰（beta=0のときは線形回帰）
-class Tikhonov:
-    def __init__(self, N_x, N_y, beta):
-        self.beta = beta
-        self.X_XT = torch.zeros(N_x, N_x, dtype=torch.float32).to(device)
-        self.D_XT = torch.zeros(N_y, N_x, dtype=torch.float32).to(device)
-        self.N_y = N_y
-        self.N_x = N_x
-
-    # 学習用の行列の更新
-    def __call__(self, d, x):
-        x = torch.unsqueeze(x, dim=-1)
-        d = torch.unsqueeze(d, dim=-1)
-        self.X_XT += torch.matmul(x, x.T)
-        self.D_XT += torch.matmul(d, x.T)
-
-    # Woutの最適解（近似解）の導出
-    def get_Wout_opt(self):
-        I = np.identity(self.N_x).astype(np.float32)
-        I = torch.from_numpy(I).to(device)
-        X_pseudo_inv = torch.inverse(self.X_XT + self.beta*I)
-        Wout_opt = torch.matmul(self.D_XT, X_pseudo_inv)
-        return Wout_opt
-
 
 # エコーステートネットワーク
 class ESN:
@@ -95,23 +71,22 @@ class ESN:
     # バッチ学習
     # U_T [T, N_u]
     # D_T [T, N_y]
-    def train(self, U_T, D_T, optimizer, trans_len = 10):
-        train_len = len(U_T)
+    def train(self, UT, DT, trans_len = 10):
+        train_len = len(UT)
         Y = []
 
         # 時間発展
         X = []
         D = []
         for n in range(train_len):
-            u = U_T[n]
-            d = D_T[n]
+            u = UT[n]
+            d = DT[n]
             
             # リザバー状態ベクトル
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 学習器
             if n >= trans_len:  # 過渡期を過ぎたら
-                optimizer(d, self.x)
                 X.append(torch.unsqueeze(self.x, dim=-1))
                 D.append(torch.unsqueeze(d, dim=-1))
 
@@ -119,23 +94,17 @@ class ESN:
             y = torch.mv(self.Wout, self.x)
             Y.append(torch.unsqueeze(y, dim=-1))
 
-        X = torch.cat(X, 1)
-        D = torch.cat(D, 1)
-        Y = torch.cat(Y, 1)
+        X = torch.cat(X, 1) # [N_x, T-trans_len]
+        D = torch.cat(D, 1) # [N_y, T-trans_len]
 
-
-         
-        print(X.size())
-        print(D.size())
-        print(Y.size())
-
-        exit()
-
-        # 学習済みの出力結合重み行列を設定
-        self.Wout = optimizer.get_Wout_opt()
+        D_XT = torch.matmul(D, X.T)          # [N_y, N_x]
+        X_XT = torch.matmul(X, X.T)          # [N_x, N_x]
+        I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
+        beta_I = 0.001 * I.to(torch.float32) # [N_x, N_x]
         
-        # モデル出力（学習前）
-        return Y
+        # 出力重みの計算 [N_y, N_x]
+        self.Wout = torch.matmul(D_XT,  torch.inverse(X_XT + beta_I))
+
 
     # バッチ学習後の予測
     def predict(self, U):
@@ -173,13 +142,12 @@ def main():
     D_test = data[train_len+step:]
 
     esn = ESN(1, 1, 5)
-    optimizer = Tikhonov(5, 1, 1e-3)
 
     U = torch.from_numpy(U_train).to(device)
     D = torch.from_numpy(D_train).to(device)
     U = torch.unsqueeze(U, dim=-1)
     D = torch.unsqueeze(D, dim=-1)
-    esn.train(U, D, optimizer)
+    esn.train(U, D)
 
     U = torch.from_numpy(U_test).to(device)
     U = torch.unsqueeze(U, dim=-1)
