@@ -107,13 +107,13 @@ class ESN:
 
 
     # バッチ学習後の予測
-    def predict(self, U):
-        test_len = len(U)
+    def predict(self, UT):
+        test_len = len(UT)
         Y_pred = []
 
         # 時間発展
         for n in range(test_len):
-            u = U[n]
+            u = UT[n]
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 学習後のモデル出力
@@ -136,24 +136,24 @@ def main():
     test_len = len(data) - train_len - step
 
     # [T, N_u]
-    U_train = data[:train_len]
-    D_train = data[step:train_len+step]
-    U_test = data[train_len:train_len+test_len]
-    D_test = data[train_len+step:]
+    UT_train = data[:train_len]
+    DT_train = data[step:train_len+step]
+    UT_test = data[train_len:train_len+test_len]
+    DT_test = data[train_len+step:]
 
     esn = ESN(1, 1, 5)
 
-    U = torch.from_numpy(U_train).to(device)
-    D = torch.from_numpy(D_train).to(device)
-    U = torch.unsqueeze(U, dim=-1)
-    D = torch.unsqueeze(D, dim=-1)
-    esn.train(U, D)
+    UT = torch.from_numpy(UT_train).to(device)
+    DT = torch.from_numpy(DT_train).to(device)
+    UT = torch.unsqueeze(UT, dim=-1)
+    DT = torch.unsqueeze(DT, dim=-1)
+    esn.train(UT, DT)
 
-    U = torch.from_numpy(U_test).to(device)
-    U = torch.unsqueeze(U, dim=-1)
-    y = esn.predict(U)
+    UT = torch.from_numpy(UT_test).to(device)
+    UT = torch.unsqueeze(UT, dim=-1)
+    y = esn.predict(UT)
     
-    plt.plot(D_test[:400])
+    plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
     plt.show()
 
