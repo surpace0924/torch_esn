@@ -93,31 +93,49 @@ class ESN:
         return x
 
     # バッチ学習
-    def train(self, U, D, optimizer, trans_len = 0):
-        train_len = len(U)
+    # U_T [T, N_u]
+    # D_T [T, N_y]
+    def train(self, U_T, D_T, optimizer, trans_len = 10):
+        train_len = len(U_T)
         Y = []
 
         # 時間発展
+        X = []
+        D = []
         for n in range(train_len):
-            u = U[n]
-            d = D[n]
+            u = U_T[n]
+            d = D_T[n]
             
             # リザバー状態ベクトル
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 学習器
-            if n > trans_len:  # 過渡期を過ぎたら
+            if n >= trans_len:  # 過渡期を過ぎたら
                 optimizer(d, self.x)
+                X.append(torch.unsqueeze(self.x, dim=-1))
+                D.append(torch.unsqueeze(d, dim=-1))
 
             # 学習前のモデル出力
             y = torch.mv(self.Wout, self.x)
-            Y.append(y)
+            Y.append(torch.unsqueeze(y, dim=-1))
+
+        X = torch.cat(X, 1)
+        D = torch.cat(D, 1)
+        Y = torch.cat(Y, 1)
+
+
+         
+        print(X.size())
+        print(D.size())
+        print(Y.size())
+
+        exit()
 
         # 学習済みの出力結合重み行列を設定
         self.Wout = optimizer.get_Wout_opt()
         
         # モデル出力（学習前）
-        return torch.cat(Y)
+        return Y
 
     # バッチ学習後の予測
     def predict(self, U):
@@ -154,8 +172,8 @@ def main():
     U_test = data[train_len:train_len+test_len]
     D_test = data[train_len+step:]
 
-    esn = ESN(1, 1, 10)
-    optimizer = Tikhonov(10, 1, 1e-3)
+    esn = ESN(1, 1, 5)
+    optimizer = Tikhonov(5, 1, 1e-3)
 
     U = torch.from_numpy(U_train).to(device)
     D = torch.from_numpy(D_train).to(device)
