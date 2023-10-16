@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import torch
+import torch.nn as nn
 from torch.nn import functional as F
 device = torch.device('cuda')
 
@@ -68,7 +69,6 @@ class ESN:
     # D_T [T, N_y]
     def train(self, UT, DT, trans_len = 10):
         train_len = len(UT)
-        Y = []
 
         # 時間発展
         X = []
@@ -84,10 +84,6 @@ class ESN:
             if n >= trans_len:  # 過渡期を過ぎたら
                 X.append(torch.unsqueeze(self.x, dim=-1))
                 D.append(torch.unsqueeze(d, dim=-1))
-
-            # 学習前のモデル出力
-            y = torch.mv(self.Wout, self.x)
-            Y.append(torch.unsqueeze(y, dim=-1))
 
         X = torch.cat(X, 1) # [N_x, T-trans_len]
         D = torch.cat(D, 1) # [N_y, T-trans_len]
