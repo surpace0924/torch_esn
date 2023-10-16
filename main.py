@@ -71,12 +71,8 @@ class ESN:
         train_len = len(UT)
 
         # 時間発展
-        X = []
-        D = []
-        for n in range(train_len):
-            u = UT[n]
-            d = DT[n]
-            
+        X, D= [], []
+        for n, (u, d) in enumerate(zip(UT, DT)):
             # リザバー状態ベクトル
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
@@ -85,9 +81,8 @@ class ESN:
                 X.append(torch.unsqueeze(self.x, dim=-1))
                 D.append(torch.unsqueeze(d, dim=-1))
 
-        X = torch.cat(X, 1) # [N_x, T-trans_len]
-        D = torch.cat(D, 1) # [N_y, T-trans_len]
-
+        X = torch.cat(X, 1)                  # [N_x, T-trans_len]
+        D = torch.cat(D, 1)                  # [N_y, T-trans_len]
         D_XT = torch.matmul(D, X.T)          # [N_y, N_x]
         X_XT = torch.matmul(X, X.T)          # [N_x, N_x]
         I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
