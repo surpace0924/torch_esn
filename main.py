@@ -11,7 +11,6 @@ import networkx as nx
 
 # エコーステートネットワーク
 class ESN(nn.Module):
-    # 各層の初期化
     def __init__(self,
                  N_u,
                  N_y,
@@ -20,17 +19,22 @@ class ESN(nn.Module):
                  input_scale=1.0,
                  rho=0.95,
                  leaking_rate=1.0):
-        self.seed = 0
-        np.random.seed(seed=self.seed)
-        self.W_in = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale).to(device)
-        self.N_u = N_u
+        super().__init__()
+        
+        W_in  = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale).to(device)
+        W     = self.make_W(N_x, density, rho)
+        W_out = torch.Tensor(N_y, N_x).to(device)
 
-        self.W = self.make_W(N_x, density, rho)
+        # モデルのパラメータ登録
+        # W_out以外は重み更新を禁止する
+        self.W_in  = nn.Parameter(W_in,  requires_grad=False)
+        self.W     = nn.Parameter(W,     requires_grad=False)
+        self.W_out = nn.Parameter(W_out, requires_grad=True)
+        print(self.W_out.size())
+
+        self.seed = 0
         self.x = torch.Tensor(N_x).to(device)
         self.alpha = leaking_rate
-
-        self.Wout = torch.Tensor(N_y, N_x).to(device)
-
         self.N_u = N_u
         self.N_y = N_y
         self.N_x = N_x
@@ -67,17 +71,15 @@ class ESN(nn.Module):
     # バッチ学習
     # U_T [T, N_u]
     # D_T [T, N_y]
-    def train(self, UT, DT, trans_len = 10):
-        train_len = len(UT)
-
+    def fit(self, UT, DT, trans_len = 800):
         # 時間発展
         X, D= [], []
         for n, (u, d) in enumerate(zip(UT, DT)):
             # リザバー状態ベクトル
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
-            # 学習器
-            if n >= trans_len:  # 過渡期を過ぎたら
+            # 過渡期を過ぎたら
+            if n >= trans_len:
                 X.append(torch.unsqueeze(self.x, dim=-1))
                 D.append(torch.unsqueeze(d, dim=-1))
 
@@ -89,11 +91,12 @@ class ESN(nn.Module):
         beta_I = 0.001 * I.to(torch.float32) # [N_x, N_x]
         
         # 出力重みの計算 [N_y, N_x]
-        self.Wout = D_XT @ torch.inverse(X_XT + beta_I)
+        W_out = D_XT @ torch.inverse(X_XT + beta_I)
+        self.W_out = nn.Parameter(W_out)
 
 
     # バッチ学習後の予測
-    def predict(self, UT):
+    def forward(self, UT):
         test_len = len(UT)
         Y_pred = []
 
@@ -103,7 +106,7 @@ class ESN(nn.Module):
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 学習後のモデル出力
-            y_pred = self.Wout @ self.x
+            y_pred = self.W_out @ self.x
             Y_pred.append(y_pred)
 
         # モデル出力（学習後）
@@ -133,11 +136,11 @@ def main():
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     DT = torch.unsqueeze(DT, dim=-1)
-    esn.train(UT, DT)
+    esn.fit(UT, DT)
 
     UT = torch.from_numpy(UT_test).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
-    y = esn.predict(UT)
+    y = esn(UT)
     
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
