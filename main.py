@@ -6,38 +6,60 @@ from torch.nn import functional as F
 device = torch.device('cuda')
 
 import numpy as np
-import networkx as nx
+
+import random
+
+def torch_fix_seed(seed=42):
+    # Python random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms = True
 
 
-# エコーステートネットワーク
+torch_fix_seed()
+
+
 class ESN(nn.Module):
     def __init__(self,
                  N_u,
-                 N_y,
                  N_x,
+                 N_y,
                  density=0.05,
                  input_scale=1.0,
                  rho=0.95,
-                 leaking_rate=1.0):
+                 leaking_rate=1.0,
+                 regularization_rate=1.0):
         super().__init__()
+        # 各ベクトルの次元数
+        self.N_u = N_u
+        self.N_x = N_x
+        self.N_y = N_y
         
+        # 重み行列の定義
         W_in  = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale).to(device)
         W     = self.make_W(N_x, density, rho)
-        W_out = torch.Tensor(N_y, N_x).to(device)
+        W_out = torch.zeros(N_y, N_x).to(device)
 
         # モデルのパラメータ登録
         # W_out以外は重み更新を禁止する
         self.W_in  = nn.Parameter(W_in,  requires_grad=False)
         self.W     = nn.Parameter(W,     requires_grad=False)
         self.W_out = nn.Parameter(W_out, requires_grad=True)
-        print(self.W_out.size())
-
-        self.seed = 0
+        
+        # リザバー状態ベクトルと逆行列計算用行列
         self.x = torch.Tensor(N_x).to(device)
+        self.D_XT = torch.Tensor(N_y, N_x)    # [N_y, N_x]
+        self.X_XT = torch.Tensor(N_x, N_x)    # [N_x, N_x]
+
+        # LIの漏れ率とリッジ回帰の正則化係数
         self.alpha = leaking_rate
-        self.N_u = N_u
-        self.N_y = N_y
-        self.N_x = N_x
+        self.beta = regularization_rate
+        
 
     # density: 結合密度
     # density: スペクトル半径
@@ -71,46 +93,43 @@ class ESN(nn.Module):
     # バッチ学習
     # U_T [T, N_u]
     # D_T [T, N_y]
-    def fit(self, UT, DT, trans_len = 800):
-        # 時間発展
-        X, D= [], []
-        for n, (u, d) in enumerate(zip(UT, DT)):
+    def fit(self):
+        I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
+        beta_I = self.beta * I.to(torch.float32) # [N_x, N_x]
+    
+        # 出力重みの計算 [N_y, N_x]
+        W_out = self.D_XT @ torch.inverse(self.X_XT + beta_I)
+        self.W_out = nn.Parameter(W_out)
+
+
+    # バッチ学習後の予測
+    def forward(self, UT, trans_len = 0, DT = None):
+        X, D, Y = [], [], []
+        for n, u in enumerate(UT):
             # リザバー状態ベクトル
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 過渡期を過ぎたら
             if n >= trans_len:
+                y = self.W_out @ self.x
                 X.append(torch.unsqueeze(self.x, dim=-1))
-                D.append(torch.unsqueeze(d, dim=-1))
+                Y.append(torch.unsqueeze(y, dim=-1))
+
+                # 教師データがある場合はそれもスタック
+                if DT is not None:
+                    D.append(torch.unsqueeze(DT[n], dim=-1))
 
         X = torch.cat(X, 1)                  # [N_x, T-trans_len]
-        D = torch.cat(D, 1)                  # [N_y, T-trans_len]
-        D_XT = D @ X.T                       # [N_y, N_x]
-        X_XT = X @ X.T                       # [N_x, N_x]
-        I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
-        beta_I = 0.001 * I.to(torch.float32) # [N_x, N_x]
-        
-        # 出力重みの計算 [N_y, N_x]
-        W_out = D_XT @ torch.inverse(X_XT + beta_I)
-        self.W_out = nn.Parameter(W_out)
+        Y = torch.cat(Y)
 
-
-    # バッチ学習後の予測
-    def forward(self, UT):
-        test_len = len(UT)
-        Y_pred = []
-
-        # 時間発展
-        for n in range(test_len):
-            u = UT[n]
-            self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
-
-            # 学習後のモデル出力
-            y_pred = self.W_out @ self.x
-            Y_pred.append(y_pred)
+        # 教師データがある場合は学習のための行列を計算
+        if DT is not None:
+            D = torch.cat(D, 1)                  # [N_y, T-trans_len]
+            self.D_XT = D @ X.T                       # [N_y, N_x]
+            self.X_XT = X @ X.T                       # [N_x, N_x]
 
         # モデル出力（学習後）
-        return torch.cat(Y_pred)
+        return Y
     
 
 
@@ -118,7 +137,7 @@ import matplotlib.pyplot as plt
 
 def main():
     # data = np.sin(np.arange(1000)/10).astype(np.float32)
-    step = 10
+    step = 5
     data = np.loadtxt('datasets/mg17.csv', delimiter=',', dtype=np.float32).T[0]
 
     train_len = int(len(data) * 0.8)
@@ -130,17 +149,23 @@ def main():
     UT_test = data[train_len:train_len+test_len]
     DT_test = data[train_len+step:]
 
-    esn = ESN(1, 1, 5)
+    esn = ESN(1, 30, 1)
 
     UT = torch.from_numpy(UT_train).to(device)
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     DT = torch.unsqueeze(DT, dim=-1)
-    esn.fit(UT, DT)
+    for param in esn.parameters():
+        print(param)
+    esn(UT, 100, DT)
+    esn.fit()
+    for param in esn.parameters():
+        print(param)
 
     UT = torch.from_numpy(UT_test).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     y = esn(UT)
+    print(y.size())
     
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
