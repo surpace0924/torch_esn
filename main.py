@@ -10,7 +10,7 @@ import networkx as nx
 
 
 # エコーステートネットワーク
-class ESN:
+class ESN(nn.Module):
     # 各層の初期化
     def __init__(self,
                  N_u,
@@ -83,13 +83,13 @@ class ESN:
 
         X = torch.cat(X, 1)                  # [N_x, T-trans_len]
         D = torch.cat(D, 1)                  # [N_y, T-trans_len]
-        D_XT = torch.matmul(D, X.T)          # [N_y, N_x]
-        X_XT = torch.matmul(X, X.T)          # [N_x, N_x]
+        D_XT = D @ X.T                       # [N_y, N_x]
+        X_XT = X @ X.T                       # [N_x, N_x]
         I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
         beta_I = 0.001 * I.to(torch.float32) # [N_x, N_x]
         
         # 出力重みの計算 [N_y, N_x]
-        self.Wout = torch.matmul(D_XT,  torch.inverse(X_XT + beta_I))
+        self.Wout = D_XT @ torch.inverse(X_XT + beta_I)
 
 
     # バッチ学習後の予測
@@ -103,7 +103,7 @@ class ESN:
             self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
 
             # 学習後のモデル出力
-            y_pred = torch.mv(self.Wout, self.x)
+            y_pred = self.Wout @ self.x
             Y_pred.append(y_pred)
 
         # モデル出力（学習後）
