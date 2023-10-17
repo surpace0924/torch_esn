@@ -86,7 +86,7 @@ class ESN(nn.Module):
         
         return W
 
-    def reservoir(self, u, x, alpha, W_in, W):
+    def reservoir(self, u, x, W_in, W, alpha):
         x = (1.0 - alpha) * x + alpha * torch.tanh(F.linear(u, W_in) + F.linear(x, W))
         return x
 
@@ -106,30 +106,30 @@ class ESN(nn.Module):
     def forward(self, UT, trans_len = 0, DT = None):
         X, D, Y = [], [], []
         for n, u in enumerate(UT):
-            # リザバー状態ベクトル
-            self.x = self.reservoir(u, self.x, self.alpha, self.W_in, self.W)
+            # リザバーの時間発展と出力を計算
+            self.x = self.reservoir(u, self.x, self.W_in, self.W, self.alpha)
+            y = self.W_out @ self.x
 
-            # 過渡期を過ぎたら
-            if n >= trans_len:
-                y = self.W_out @ self.x
-                X.append(torch.unsqueeze(self.x, dim=-1))
-                Y.append(torch.unsqueeze(y, dim=-1))
+            # 計算結果をappend
+            X.append(torch.unsqueeze(self.x, dim=-1))
+            Y.append(torch.unsqueeze(y, dim=-1))
 
-                # 教師データがある場合はそれもスタック
-                if DT is not None:
-                    D.append(torch.unsqueeze(DT[n], dim=-1))
-
-        X = torch.cat(X, 1)                  # [N_x, T-trans_len]
-        Y = torch.cat(Y)
-
+            # 教師データがある場合はそれもappend
+            if DT is not None:
+                D.append(torch.unsqueeze(DT[n], dim=-1))
+        
+        # リザバー状態/出力ベクトルを横につなげた行列
+        X = torch.cat(X, 1)     # [N_x, T-trans_len]
+        Y = torch.cat(Y, 1)     # [N_y, T-trans_len]
+        
         # 教師データがある場合は学習のための行列を計算
         if DT is not None:
-            D = torch.cat(D, 1)                  # [N_y, T-trans_len]
-            self.D_XT = D @ X.T                       # [N_y, N_x]
-            self.X_XT = X @ X.T                       # [N_x, N_x]
+            D = torch.cat(D, 1) # [N_y, T-trans_len]
+            self.D_XT = D @ X.T # [N_y, N_x]
+            self.X_XT = X @ X.T # [N_x, N_x]
 
-        # モデル出力（学習後）
-        return Y
+        # 軸が逆のほうが扱いやすいため転置して返す
+        return Y.T, X.T
     
 
 
@@ -155,17 +155,18 @@ def main():
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     DT = torch.unsqueeze(DT, dim=-1)
-    for param in esn.parameters():
-        print(param)
+    # for param in esn.parameters():
+    #     print(param)
     esn(UT, 100, DT)
     esn.fit()
-    for param in esn.parameters():
-        print(param)
+    print()
+    # for param in esn.parameters():
+    #     print(param)
 
     UT = torch.from_numpy(UT_test).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
-    y = esn(UT)
-    print(y.size())
+    y, _ = esn(UT)
+    # print(y.size())
     
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
