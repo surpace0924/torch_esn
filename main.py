@@ -131,9 +131,19 @@ class ESN(nn.Module):
         # 軸が逆のほうが扱いやすいため転置して返す
         return Y.T, X.T
     
-
-
 import matplotlib.pyplot as plt
+def save_plot(esn, UT_test, DT_test, i):
+    UT = torch.from_numpy(UT_test).to(device)
+    UT = torch.unsqueeze(UT, dim=-1)
+    y, _ = esn(UT)
+
+
+    fig = plt.figure()
+    plt.ylim([0, 1.5])
+    plt.plot(DT_test[:400])
+    plt.plot(y.to('cpu').detach().numpy().copy()[:400])
+    plt.savefig(f'{str(i).zfill(4)}.png')
+
 
 def main():
     # data = np.sin(np.arange(1000)/10).astype(np.float32)
@@ -155,22 +165,34 @@ def main():
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     DT = torch.unsqueeze(DT, dim=-1)
-    # for param in esn.parameters():
-    #     print(param)
-    esn(UT, 100, DT)
-    esn.fit()
-    print()
-    # for param in esn.parameters():
-    #     print(param)
 
-    UT = torch.from_numpy(UT_test).to(device)
-    UT = torch.unsqueeze(UT, dim=-1)
-    y, _ = esn(UT)
-    # print(y.size())
+    for param in esn.parameters():
+        print(param)
+    print()
     
-    plt.plot(DT_test[:400])
-    plt.plot(y.to('cpu').detach().numpy().copy()[:400])
-    plt.show()
+    # 逆行列による最適化
+    # esn(UT, 100, DT)
+    # esn.fit()
+
+    # 勾配法による最適化
+    epoch_num = 100
+    criterion = nn.MSELoss()
+    import torch.optim as optim
+    optimizer = torch.optim.Adam(esn.parameters(), lr=1e-2)
+    for epoch in range(epoch_num):
+        preds, _ = esn(UT)
+        loss = criterion(preds, DT)
+        print(loss)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        # save_plot(esn, UT_test, DT_test, epoch)
+
+    for param in esn.parameters():
+        print(param)
+    
+    save_plot(esn, UT_test, DT_test, 100)
+    
 
 if __name__ == '__main__':
     main()
