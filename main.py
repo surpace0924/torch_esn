@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-device = torch.device('cuda')
 
 import numpy as np
 
@@ -134,6 +133,7 @@ class ESN(nn.Module):
     
 import matplotlib.pyplot as plt
 def save_plot(esn, UT_test, DT_test, i):
+    device = torch.device('cuda')
     UT = torch.from_numpy(UT_test).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     y, _ = esn(UT)
@@ -143,7 +143,8 @@ def save_plot(esn, UT_test, DT_test, i):
     plt.ylim([0, 1.5])
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
-    plt.savefig(f'{str(i).zfill(4)}.png')
+    plt.show()
+    # plt.savefig(f'{str(i).zfill(4)}.png')
 
 
 def main():
@@ -161,6 +162,7 @@ def main():
     DT_test = data[train_len+step:]
 
     esn = ESN(1, 30, 1)
+    device = torch.device('cuda')
     esn.to(device=device)
 
     UT = torch.from_numpy(UT_train).to(device)
