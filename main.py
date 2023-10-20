@@ -29,7 +29,7 @@ class ESN(nn.Module):
                  N_u,
                  N_x,
                  N_y,
-                 density=0.05,
+                 density=0.05,  
                  input_scale=1.0,
                  rho=0.95,
                  leaking_rate=1.0,
@@ -41,9 +41,9 @@ class ESN(nn.Module):
         self.N_y = N_y
         
         # 重み行列の定義
-        W_in  = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale).to(device)
+        W_in  = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale)
         W     = self.make_W(N_x, density, rho)
-        W_out = torch.zeros(N_y, N_x).to(device)
+        W_out = torch.zeros(N_y, N_x)
 
         # モデルのパラメータ登録
         # W_out以外は重み更新を禁止する
@@ -52,7 +52,7 @@ class ESN(nn.Module):
         self.W_out = nn.Parameter(W_out, requires_grad=True)
         
         # リザバー状態ベクトルと逆行列計算用行列
-        self.x = torch.Tensor(N_x).to(device)
+        self.x = torch.Tensor(N_x)
         self.D_XT = torch.Tensor(N_y, N_x)    # [N_y, N_x]
         self.X_XT = torch.Tensor(N_x, N_x)    # [N_x, N_x]
 
@@ -65,7 +65,7 @@ class ESN(nn.Module):
     # density: スペクトル半径
     def make_W(self, N_x, density, spectral_radius):
         # N_x*N_x次元のベクトルを用意
-        W = torch.Tensor(N_x * N_x).to(device)
+        W = torch.Tensor(N_x * N_x)
 
         # [-1.0, 1.0] の乱数で初期化
         W.uniform_(-1.0, 1.0)
@@ -87,6 +87,7 @@ class ESN(nn.Module):
         return W
 
     def reservoir(self, u, x, W_in, W, alpha):
+        x = x.to(device=W.device)
         x = (1.0 - alpha) * x + alpha * torch.tanh(F.linear(u, W_in) + F.linear(x, W))
         return x
 
@@ -94,8 +95,8 @@ class ESN(nn.Module):
     # U_T [T, N_u]
     # D_T [T, N_y]
     def fit(self):
-        I = torch.eye(self.N_x).to(device)   # [N_x, N_x]
-        beta_I = self.beta * I.to(torch.float32) # [N_x, N_x]
+        I = torch.eye(self.N_x)   # [N_x, N_x]
+        beta_I = self.beta * I.to(torch.float32).to(device=self.W.device)
     
         # 出力重みの計算 [N_y, N_x]
         W_out = self.D_XT @ torch.inverse(self.X_XT + beta_I)
@@ -160,33 +161,34 @@ def main():
     DT_test = data[train_len+step:]
 
     esn = ESN(1, 30, 1)
+    esn.to(device=device)
 
     UT = torch.from_numpy(UT_train).to(device)
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
     DT = torch.unsqueeze(DT, dim=-1)
 
-    for param in esn.parameters():
-        print(param)
-    print()
+    # for param in esn.parameters():
+    #     print(param)
+    # print()
     
     # 逆行列による最適化
-    # esn(UT, 100, DT)
-    # esn.fit()
+    esn(UT, 100, DT)
+    esn.fit()
 
     # 勾配法による最適化
-    epoch_num = 100
-    criterion = nn.MSELoss()
-    import torch.optim as optim
-    optimizer = torch.optim.Adam(esn.parameters(), lr=1e-2)
-    for epoch in range(epoch_num):
-        preds, _ = esn(UT)
-        loss = criterion(preds, DT)
-        print(loss)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        # save_plot(esn, UT_test, DT_test, epoch)
+    # epoch_num = 100
+    # criterion = nn.MSELoss()
+    # import torch.optim as optim
+    # optimizer = torch.optim.Adam(esn.parameters(), lr=1e-2)
+    # for epoch in range(epoch_num):
+    #     preds, _ = esn(UT)
+    #     loss = criterion(preds, DT)
+    #     print(loss)
+    #     loss.backward()
+    #     optimizer.step()
+    #     optimizer.zero_grad()
+    #     # save_plot(esn, UT_test, DT_test, epoch)
 
     for param in esn.parameters():
         print(param)
