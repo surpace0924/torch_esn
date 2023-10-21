@@ -20,7 +20,7 @@ def torch_fix_seed(seed=42):
     torch.use_deterministic_algorithms = True
 
 
-torch_fix_seed()
+torch_fix_seed() 
 
 
 class ESN(nn.Module):
@@ -31,7 +31,7 @@ class ESN(nn.Module):
                  density=0.05,  
                  input_scale=1.0,
                  rho=0.95,
-                 leaking_rate=1.0,
+                 leaking_rate=0.95,
                  regularization_rate=1.0):
         super().__init__()
         # 各ベクトルの次元数
@@ -51,7 +51,7 @@ class ESN(nn.Module):
         self.W_out = nn.Parameter(W_out, requires_grad=True)
         
         # リザバー状態ベクトルと逆行列計算用行列
-        self.x = torch.Tensor(N_x)
+        self.x = torch.zeros(N_x)
         self.D_XT = torch.Tensor(N_y, N_x)    # [N_y, N_x]
         self.X_XT = torch.Tensor(N_x, N_x)    # [N_x, N_x]
 
@@ -117,7 +117,7 @@ class ESN(nn.Module):
             # 教師データがある場合はそれもappend
             if DT is not None:
                 D.append(torch.unsqueeze(DT[n], dim=-1))
-        
+
         # リザバー状態/出力ベクトルを横につなげた行列
         X = torch.cat(X, 1)     # [N_x, T-trans_len]
         Y = torch.cat(Y, 1)     # [N_y, T-trans_len]
@@ -178,7 +178,7 @@ def main():
     esn(UT, 100, DT)
     esn.fit()
 
-    # 勾配法による最適化
+    # # 勾配法による最適化
     # epoch_num = 100
     # criterion = nn.MSELoss()
     # import torch.optim as optim
@@ -190,10 +190,10 @@ def main():
     #     loss.backward()
     #     optimizer.step()
     #     optimizer.zero_grad()
-    #     # save_plot(esn, UT_test, DT_test, epoch)
+    #     save_plot(esn, UT_test, DT_test, epoch)
 
-    for param in esn.parameters():
-        print(param)
+    # for param in esn.parameters():
+    #     print(param)
     
     save_plot(esn, UT_test, DT_test, 100)
     
