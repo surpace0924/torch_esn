@@ -85,10 +85,12 @@ class ESN(nn.Module):
         
         return W
 
+
     def reservoir(self, u, x, W_in, W, alpha):
         x = x.to(device=W.device)
         x = (1.0 - alpha) * x + alpha * torch.tanh(F.linear(u, W_in) + F.linear(x, W))
         return x
+
 
     # バッチ学習
     # U_T [T, N_u]
@@ -104,32 +106,30 @@ class ESN(nn.Module):
 
     # バッチ学習後の予測
     def forward(self, UT, trans_len = 0, DT = None):
-        X, D, Y = [], [], []
-        for n, u in enumerate(UT):
+        X, Y = [], []
+        for u in UT:
             # リザバーの時間発展と出力を計算
             self.x = self.reservoir(u, self.x, self.W_in, self.W, self.alpha)
             y = self.W_out @ self.x
-
-            # 計算結果をappend
             X.append(torch.unsqueeze(self.x, dim=-1))
             Y.append(torch.unsqueeze(y, dim=-1))
 
-            # 教師データがある場合はそれもappend
-            if DT is not None:
-                D.append(torch.unsqueeze(DT[n], dim=-1))
-
         # リザバー状態/出力ベクトルを横につなげた行列
-        X = torch.cat(X, 1)     # [N_x, T-trans_len]
-        Y = torch.cat(Y, 1)     # [N_y, T-trans_len]
+        X = torch.cat(X, 1)     # [N_x, T]
+        Y = torch.cat(Y, 1)     # [N_y, T]
         
         # 教師データがある場合は学習のための行列を計算
         if DT is not None:
-            D = torch.cat(D, 1) # [N_y, T-trans_len]
-            self.D_XT = D @ X.T # [N_y, N_x]
-            self.X_XT = X @ X.T # [N_x, N_x]
+            D = DT.T    # [N_y, T]
+            cal_period = X.size()[1] - trans_len
+            X_trimmed = X[:, :cal_period]       
+            D_trimmed = D[:, :cal_period]
+            self.D_XT = D_trimmed @ X_trimmed.T # [N_y, N_x]
+            self.X_XT = X_trimmed @ X_trimmed.T # [N_x, N_x]
 
         # 軸が逆のほうが扱いやすいため転置して返す
         return Y.T, X.T
+    
     
 import matplotlib.pyplot as plt
 def save_plot(esn, UT_test, DT_test, i):
@@ -161,7 +161,7 @@ def main():
     UT_test = data[train_len:train_len+test_len]
     DT_test = data[train_len+step:]
 
-    esn = ESN(1, 30, 1)
+    esn = ESN(1, 8, 1)
     device = torch.device('cuda')
     esn.to(device=device)
 
@@ -175,7 +175,7 @@ def main():
     # print()
     
     # 逆行列による最適化
-    esn(UT, 100, DT)
+    esn(UT, 800, DT)
     esn.fit()
 
     # # 勾配法による最適化
