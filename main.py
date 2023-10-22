@@ -121,16 +121,16 @@ class ESN(nn.Module):
         # 教師データがある場合は学習のための行列を計算
         if DT is not None:
             D = DT.T    # [N_y, T]
-            cal_period = X.size()[1] - trans_len
-            X_trimmed = X[:, :cal_period]       
-            D_trimmed = D[:, :cal_period]
+            cal_len = X.size()[1] - trans_len
+            X_trimmed = X[:, :cal_len]       
+            D_trimmed = D[:, :cal_len]
             self.D_XT = D_trimmed @ X_trimmed.T # [N_y, N_x]
             self.X_XT = X_trimmed @ X_trimmed.T # [N_x, N_x]
 
         # 軸が逆のほうが扱いやすいため転置して返す
         return Y.T, X.T
     
-    
+
 import matplotlib.pyplot as plt
 def save_plot(esn, UT_test, DT_test, i):
     device = torch.device('cuda')
