@@ -27,9 +27,7 @@ def save_plot(model, UT_test, DT_test, i):
     UT = torch.unsqueeze(UT, dim=-1)
     y, _ = model(UT)
 
-
     fig = plt.figure()
-    plt.ylim([0, 1.5])
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400])
     plt.show()
@@ -39,9 +37,9 @@ def save_plot(model, UT_test, DT_test, i):
 def main():
     # data = np.sin(np.arange(1000)/10).astype(np.float32)
     step = 5
-    data = np.loadtxt('datasets/mg17.csv', delimiter=',', dtype=np.float32).T[0]
+    data = np.loadtxt('datasets/mg17.csv', dtype=np.float32)
 
-    train_len = int(len(data) * 0.8)
+    train_len = int(len(data) * 0.9)
     test_len = len(data) - train_len - step
 
     # [T, N_u]
@@ -64,7 +62,8 @@ def main():
     # print()
     
     # 逆行列による最適化
-    model(UT, 800, DT)
+    trans_len = int(train_len*0.1)
+    model(UT, trans_len, DT)
     model.fit()
 
     # # 勾配法による最適化
