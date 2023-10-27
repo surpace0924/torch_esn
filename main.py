@@ -5,6 +5,8 @@ import numpy as np
 import random
 import esn
 
+import torch.nn as nn
+
 def torch_fix_seed(seed=42):
     # Python random
     random.seed(seed)
@@ -31,8 +33,8 @@ def save_plot(model, UT_test, DT_test, i):
     fig = plt.figure()
     plt.plot(DT_test[:400])
     plt.plot(y.to('cpu').detach().numpy().copy()[:400, 0, 0])
-    plt.show()
-    # plt.savefig(f'{str(i).zfill(4)}.png')
+    # plt.show()
+    plt.savefig(f'{str(i).zfill(4)}.png')
 
 
 def main():
@@ -64,9 +66,9 @@ def main():
     print('UT', UT.size())
     print('DT', DT.size())
 
-    # for param in esn.parameters():
-    #     print(param)
-    # print()
+    for param in model.parameters():
+        print(param)
+    print()
     
     # 逆行列による最適化
     trans_len = int(train_len*0.1)
@@ -77,18 +79,18 @@ def main():
     # epoch_num = 100
     # criterion = nn.MSELoss()
     # import torch.optim as optim
-    # optimizer = torch.optim.Adam(esn.parameters(), lr=1e-2)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     # for epoch in range(epoch_num):
-    #     preds, _ = esn(UT)
+    #     preds, _ = model(UT)
     #     loss = criterion(preds, DT)
     #     print(loss)
     #     loss.backward()
     #     optimizer.step()
     #     optimizer.zero_grad()
-    #     save_plot(esn, UT_test, DT_test, epoch)
+    #     save_plot(model, UT_test, DT_test, epoch)
 
-    # for param in esn.parameters():
-    #     print(param)
+    for param in model.parameters():
+        print(param)
     
     save_plot(model, UT_test, DT_test, 100)
     
