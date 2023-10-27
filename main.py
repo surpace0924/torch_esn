@@ -25,11 +25,12 @@ def save_plot(model, UT_test, DT_test, i):
     device = torch.device('cuda')
     UT = torch.from_numpy(UT_test).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
+    UT = torch.unsqueeze(UT, dim=-1)
     y, _ = model(UT)
 
     fig = plt.figure()
     plt.plot(DT_test[:400])
-    plt.plot(y.to('cpu').detach().numpy().copy()[:400])
+    plt.plot(y.to('cpu').detach().numpy().copy()[:400, 0, 0])
     plt.show()
     # plt.savefig(f'{str(i).zfill(4)}.png')
 
@@ -55,7 +56,13 @@ def main():
     UT = torch.from_numpy(UT_train).to(device)
     DT = torch.from_numpy(DT_train).to(device)
     UT = torch.unsqueeze(UT, dim=-1)
+    UT = torch.unsqueeze(UT, dim=-1)
+    UT = torch.cat((UT, UT), dim=1)
     DT = torch.unsqueeze(DT, dim=-1)
+    DT = torch.unsqueeze(DT, dim=-1)
+    DT = torch.cat((DT, DT), dim=1)
+    print('UT', UT.size())
+    print('DT', DT.size())
 
     # for param in esn.parameters():
     #     print(param)

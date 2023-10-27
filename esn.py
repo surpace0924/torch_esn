@@ -19,6 +19,7 @@ class ESN(nn.Module):
         self.N_u = N_u
         self.N_x = N_x
         self.N_y = N_y
+        self.N_l = 1
         
         # 重み行列の定義
         W_in  = torch.Tensor(N_x, N_u).uniform_(-input_scale, input_scale)
@@ -30,16 +31,11 @@ class ESN(nn.Module):
         self.W_in  = nn.Parameter(W_in,  requires_grad=False)
         self.W     = nn.Parameter(W,     requires_grad=False)
         self.W_out = nn.Parameter(W_out, requires_grad=True)
-        
-        # リザバー状態ベクトルと逆行列計算用行列
-        self.x = torch.zeros(N_x)
-        self.D_XT = torch.Tensor(N_y, N_x)    # [N_y, N_x]
-        self.X_XT = torch.Tensor(N_x, N_x)    # [N_x, N_x]
 
         # LIの漏れ率とリッジ回帰の正則化係数
         self.alpha = leaking_rate
         self.beta = regularization_rate
-        
+
 
     # density: 結合密度
     # density: スペクトル半径
@@ -68,9 +64,8 @@ class ESN(nn.Module):
 
 
     def reservoir(self, u, x, W_in, W, alpha):
-        x = x.to(device=W.device)
-        x = (1.0 - alpha) * x + alpha * torch.tanh(F.linear(u, W_in) + F.linear(x, W))
-        return x
+        x = (1.0 - alpha) * x.t() + alpha * torch.tanh(F.linear(u.t(), W_in) + F.linear(x.t(), W))
+        return x.t()
 
 
     # U_T [T, N_u]
@@ -84,28 +79,41 @@ class ESN(nn.Module):
         self.W_out = nn.Parameter(W_out)
 
 
-    def forward(self, UT, trans_len = 0, DT = None):
-        X, Y = [], []
-        for u in UT:
+    def forward(self, input, trans_len=0, target=None, x_0=None):
+        device = self.W.device
+        N_b = input.size()[1]
+        
+        # 初期状態の取得 or 初期化
+        if x_0 is not None:
+            self.x = x_0[0].t()
+        else:
+            self.x = torch.zeros(self.N_x, N_b).to(device)
+        
+        # 出力計算用行列
+        self.D_XT = torch.zeros(self.N_y, self.N_x).to(device)
+        self.X_XT = torch.zeros(self.N_x, self.N_x).to(device)
+
+        # [T, N_b, N_u] -> [T, N_u, N_b]
+        input = input.permute(0, 2, 1)
+        if target is not None:
+            target = target.permute(0, 2, 1)
+        
+        # 時間発展
+        Y = []
+        for n, u in enumerate(input):
             # リザバーの時間発展と出力を計算
             self.x = self.reservoir(u, self.x, self.W_in, self.W, self.alpha)
-            y = self.W_out @ self.x
-            X.append(torch.unsqueeze(self.x, dim=-1))
-            Y.append(torch.unsqueeze(y, dim=-1))
+            y = F.linear(self.x.t(), self.W_out).t()
+            Y.append(torch.unsqueeze(y, dim=0))
 
-        # リザバー状態/出力ベクトルを横につなげた行列
-        X = torch.cat(X, 1)     # [N_x, T]
-        Y = torch.cat(Y, 1)     # [N_y, T]
-        
-        # 教師データがある場合は学習のための行列を計算
-        if DT is not None:
-            D = DT.T    # [N_y, T]
-            cal_len = X.size()[1] - trans_len
-            X_trimmed = X[:, :cal_len]       
-            D_trimmed = D[:, :cal_len]
-            self.D_XT = D_trimmed @ X_trimmed.T # [N_y, N_x]
-            self.X_XT = X_trimmed @ X_trimmed.T # [N_x, N_x]
+            # 過渡期を超えたら学習のための行列を計算
+            if n >= trans_len and target is not None:
+                d = target[n]
+                self.D_XT += d @ self.x.t()
+                self.X_XT += self.x @ self.x.t()
 
-        # 軸が逆のほうが扱いやすいため転置して返す
-        return Y.T, X.T
+        output = torch.cat(Y, 0).permute(0, 2, 1) # [T, N_b, N_y]
+        x_n = torch.unsqueeze(self.x.t(), dim=0)  # [N_l, N_b, N_x]
+    
+        return output, x_n
     
